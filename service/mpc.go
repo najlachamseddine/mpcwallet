@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/bnb-chain/tss-lib/v2/common"
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
@@ -10,7 +11,7 @@ import (
 	"github.com/bnb-chain/tss-lib/v2/tss"
 )
 
-func generateTSSKey() ([]keygen.LocalPartySaveData, error) {
+func generateTSSKey() (keygen.LocalPartySaveData, error) {
 	fmt.Println("generate TSS Key")
 	// preParams, _ := keygen.GeneratePreParams(1 * time.Minute)
 	parties := make([]*keygen.LocalParty, 0, Participants)
@@ -113,7 +114,7 @@ func generateTSSKey() ([]keygen.LocalPartySaveData, error) {
 				return err
 
 			default:
-				fmt.Println("SELECT DEFAULT")
+				time.Sleep(10 * time.Second)
 			}
 			if partyDone {
 				break
@@ -125,5 +126,5 @@ func generateTSSKey() ([]keygen.LocalPartySaveData, error) {
 	wg.Wait()
 
 	fmt.Println("POST FOR")
-	return newKeys, nil
+	return newKeys[0], nil
 }

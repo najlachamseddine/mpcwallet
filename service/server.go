@@ -63,7 +63,7 @@ func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.R
 		http.Error(w, "", http.StatusInternalServerError)
 	}
 	m.respondOK(w, result)
-	fmt.Println(result)
+	fmt.Println(result.ECDSAPub.ToECDSAPubKey())
 }
 
 func (m *WalletMPCService) respondOK(w http.ResponseWriter, response any) {
