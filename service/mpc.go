@@ -1,6 +1,9 @@
 package service
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -9,6 +12,7 @@ import (
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
 	"github.com/bnb-chain/tss-lib/v2/test"
 	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 func generateTSSKey() (keygen.LocalPartySaveData, error) {
@@ -127,4 +131,11 @@ func generateTSSKey() (keygen.LocalPartySaveData, error) {
 
 	fmt.Println("POST FOR")
 	return newKeys[0], nil
+}
+
+func toAddress(pubKey ecdsa.PublicKey) string {
+	uncompressed := elliptic.Marshal(pubKey.Curve, pubKey.X, pubKey.Y)
+	hash := crypto.Keccak256(uncompressed[1:]) // Remove the 0x04 prefix
+	addr := hash[12:]
+	return "0x" + hex.EncodeToString(addr)
 }
