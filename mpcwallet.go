@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
 	"github.com/mpcwallet/service"
+	"github.com/sirupsen/logrus"
 )
 
 // "github.com/bnb-chain/tss-lib/v2/common"
@@ -16,54 +13,54 @@ import (
 // "github.com/mpcwallet/service"
 
 func main() {
-	// var log = logrus.NewEntry(logrus.New())
-	// s, err := service.NewWalletMPCService(service.ServerOpts{ListenAddr: ":8080", Log: log})
-	// if err != nil {
-	// 	fmt.Printf("Failed to start server: %s", err)
-	// }
-	// fmt.Println("Server started")
-	// s.StartHTTPServer()
-
-	preParams, _ := keygen.GeneratePreParams(1 * time.Minute)
-	fixtures, partyIDs, err := keygen.LoadKeygenTestFixtures(service.Participants)
-	fmt.Println(len(fixtures))
+	var log = logrus.NewEntry(logrus.New())
+	s, err := service.NewWalletMPCService(service.ServerOpts{ListenAddr: ":8080", Log: log})
 	if err != nil {
-		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
-		partyIDs = tss.GenerateTestPartyIDs(service.Participants)
+		fmt.Printf("Failed to start server: %s", err)
 	}
-	p2pCtx := tss.NewPeerContext(partyIDs)
+	fmt.Println("Server started")
+	s.StartHTTPServer()
 
-	parties := make([]*keygen.LocalParty, service.Participants)
-	errCh := make(chan *tss.Error, len(partyIDs))
-	outCh := make(chan tss.Message, len(partyIDs))
-	endCh := make(chan *keygen.LocalPartySaveData, len(partyIDs))
+	// preParams, _ := keygen.GeneratePreParams(1 * time.Minute)
+	// fixtures, partyIDs, err := keygen.LoadKeygenTestFixtures(service.Participants)
+	// fmt.Println(len(fixtures))
+	// if err != nil {
+	// 	common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
+	// 	partyIDs = tss.GenerateTestPartyIDs(service.Participants)
+	// }
+	// p2pCtx := tss.NewPeerContext(partyIDs)
 
-	// updater := test.SharedPartyUpdater
+	// parties := make([]*keygen.LocalParty, service.Participants)
+	// errCh := make(chan *tss.Error, len(partyIDs))
+	// outCh := make(chan tss.Message, len(partyIDs))
+	// endCh := make(chan *keygen.LocalPartySaveData, len(partyIDs))
 
-	// startGR := runtime.NumGoroutine()
+	// // updater := test.SharedPartyUpdater
 
-	for i := 0; i < service.Participants; i++ {
-		var P *keygen.LocalParty
-		params := tss.NewParameters(tss.S256(), p2pCtx, partyIDs[i], len(partyIDs), service.Threshold)
-		if i < len(fixtures) {
-			fmt.Println("case 1")
-			P = keygen.NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*keygen.LocalParty)
-		} else {
-			fmt.Println("case 2")
-			fmt.Println(params)
-			P = keygen.NewLocalParty(params, outCh, endCh, *preParams).(*keygen.LocalParty)
-		}
-		fmt.Println(P)
-		parties = append(parties, P)
-		go func(P *keygen.LocalParty) {
-			if err := P.Start(); err != nil {
-				errCh <- err
-			}
-			// fmt.Printf("Local Party %s started\n", P.PartyID().Id)
-		}(P)
-		// partyIDMap[parties[i].PartyID().Id] = parties[i].PartyID()
-		fmt.Println(parties)
-	}
+	// // startGR := runtime.NumGoroutine()
+
+	// for i := 0; i < service.Participants; i++ {
+	// 	var P *keygen.LocalParty
+	// 	params := tss.NewParameters(tss.S256(), p2pCtx, partyIDs[i], len(partyIDs), service.Threshold)
+	// 	if i < len(fixtures) {
+	// 		fmt.Println("case 1")
+	// 		P = keygen.NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*keygen.LocalParty)
+	// 	} else {
+	// 		fmt.Println("case 2")
+	// 		fmt.Println(params)
+	// 		P = keygen.NewLocalParty(params, outCh, endCh, *preParams).(*keygen.LocalParty)
+	// 	}
+	// 	fmt.Println(P)
+	// 	parties = append(parties, P)
+	// 	go func(P *keygen.LocalParty) {
+	// 		if err := P.Start(); err != nil {
+	// 			errCh <- err
+	// 		}
+	// 		// fmt.Printf("Local Party %s started\n", P.PartyID().Id)
+	// 	}(P)
+	// 	// partyIDMap[parties[i].PartyID().Id] = parties[i].PartyID()
+	// 	fmt.Println(parties)
+	// }
 }
 
 // 	// PHASE: keygen

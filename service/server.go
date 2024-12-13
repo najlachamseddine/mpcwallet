@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -39,7 +40,7 @@ func (m *WalletMPCService) getRouter() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/", m.handleRoot)
 
-	r.HandleFunc(pathCreateWallet, m.handleCreateWallet).Methods(http.MethodPost)
+	r.HandleFunc(pathCreateWallet, m.handleCreateWallet) //.Methods(http.MethodPost)
 	// r.HandleFunc(pathGetWallets, w.handleGetWallets).Methods(http.MethodGet)
 	// r.HandleFunc(pathGetSignature, w.handleGetSignature).Methods(http.MethodGet)
 
@@ -49,11 +50,20 @@ func (m *WalletMPCService) getRouter() http.Handler {
 }
 
 func (m *WalletMPCService) handleRoot(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("handle root")
 	m.respondOK(w, nilResponse)
 }
 
 func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.Request) {
-
+	fmt.Println("handle create wallet")
+	m.respondOK(w, nilResponse)
+	result, err := generateTSSKey()
+	if err != nil {
+		m.log.WithField("response", result).WithError(err).Error("Couldn't create an tss mpc wallet")
+		http.Error(w, "", http.StatusInternalServerError)
+	}
+	m.respondOK(w, result)
+	fmt.Println(result)
 }
 
 func (m *WalletMPCService) respondOK(w http.ResponseWriter, response any) {
