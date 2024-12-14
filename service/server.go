@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/bnb-chain/tss-lib/v2/common"
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -36,6 +38,7 @@ type ServerOpts struct {
 
 type Wallet struct {
 	Address  string
+	PubKey   *ecdsa.PublicKey
 	KeysData []*keygen.LocalPartySaveData
 }
 
@@ -60,29 +63,36 @@ func (m *WalletMPCService) getRouter() http.Handler {
 }
 
 func (m *WalletMPCService) handleRoot(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("handle root")
+	common.Logger.Info("handle root")
 	m.respondOK(w, nilResponse)
 }
 
 func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("handle create wallet")
+	common.Logger.Info("handle create wallet")
 	keysData, err := generateTSSKey()
 	if err != nil {
 		m.log.WithField("response", len(keysData)).WithError(err).Error("Couldn't create an tss mpc wallet")
 		http.Error(w, "", http.StatusInternalServerError)
 	}
 
-	addr := toAddress(*keysData[0].ECDSAPub.ToECDSAPubKey())
-	newWallet := &Wallet{
-		Address:  addr,
-		KeysData: keysData,
+	pubKey := *keysData[0].ECDSAPub.ToECDSAPubKey()
+	addr := toAddress(pubKey)
+	if addr != "" {
+		newWallet := &Wallet{
+			Address:  addr,
+			PubKey:   &pubKey,
+			KeysData: keysData,
+		}
+		go func() {
+			walletsLock.Lock()
+			defer walletsLock.Unlock()
+			wallets[addr] = newWallet
+		}()
+		m.respondOK(w, json.NewEncoder(w).Encode(newWallet))
+	} else {
+		m.log.WithField("response address", addr).Error("Couldn't create an tss mpc wallet")
+		http.Error(w, "", http.StatusInternalServerError)
 	}
-	go func() {
-		walletsLock.Lock()
-		defer walletsLock.Unlock()
-		wallets[addr] = newWallet
-	}()
-	m.respondOK(w, json.NewEncoder(w).Encode(newWallet))
 }
 
 func (m *WalletMPCService) handleGetWallets(w http.ResponseWriter, req *http.Request) {
@@ -103,8 +113,6 @@ func (m *WalletMPCService) handleGetSignature(w http.ResponseWriter, req *http.R
 	walletAddr := q.Get("wallet")
 	fmt.Println(dataHex)
 	fmt.Println(walletAddr)
-	if err := req.ParseForm(); err != nil {
-	}
 	if dataHex == "" {
 		http.Error(w, "missing data param", http.StatusBadRequest)
 		return
@@ -133,7 +141,17 @@ func (m *WalletMPCService) handleGetSignature(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	resp := map[string]string{"R": hex.EncodeToString(sig.R), "S": hex.EncodeToString(sig.S)}
+	r := sig.GetR()
+	s := sig.GetS()
+
+	signature := sig.GetSignature()
+	data := ethereumMessageHash(dataBytes)
+	ok = verifySignature(*wallet.PubKey, data, bytesToBigInt(r), bytesToBigInt(s))
+	if !ok {
+		http.Error(w, fmt.Sprintf("Signing failed on signature verification: %v", err), http.StatusInternalServerError)
+		return
+	}
+	resp := map[string]string{"R": hex.EncodeToString(r), "S": hex.EncodeToString(s), "Signature": hex.EncodeToString(signature)}
 	json.NewEncoder(w).Encode(resp)
 }
 

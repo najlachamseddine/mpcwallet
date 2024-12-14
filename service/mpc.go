@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"sync"
@@ -24,7 +25,6 @@ import (
 )
 
 func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
-	fmt.Println("generate TSS Key")
 	// preParams, _ := keygen.GeneratePreParams(1 * time.Minute)
 	parties := make([]*keygen.LocalParty, 0, Participants)
 	fixtures, partyIDs, err := keygen.LoadKeygenTestFixtures(Participants)
@@ -40,15 +40,14 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 	endCh := make(chan *keygen.LocalPartySaveData, len(partyIDs))
 
 	updater := test.SharedPartyUpdater
+	startGR := runtime.NumGoroutine()
 
 	for i := 0; i < Participants; i++ {
 		var P *keygen.LocalParty
 		params := tss.NewParameters(tss.S256(), p2pCtx, partyIDs[i], len(partyIDs), Threshold)
 		if i < len(fixtures) {
-			fmt.Println("case 1")
 			P = keygen.NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*keygen.LocalParty)
 		} else {
-			fmt.Println("case 2")
 			P = keygen.NewLocalParty(params, outCh, endCh).(*keygen.LocalParty)
 		}
 		parties = append(parties, P)
@@ -68,8 +67,8 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 
 	go func() error {
 		defer wg.Done()
+	keygen:
 		for {
-			fmt.Println("FOR")
 			select {
 			case msg := <-outCh:
 				dest := msg.GetTo()
@@ -94,7 +93,7 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 				}
 				err = tryWriteTestFixtureFile(index, *save)
 				if err != nil {
-					fmt.Println("error saving into file")
+					common.Logger.Errorf("error saving into file %s", err)
 					break
 				}
 				newKeys[index] = save
@@ -111,15 +110,14 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 				time.Sleep(10 * time.Second)
 			}
 			if partyDone {
-				break
+				common.Logger.Infof("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
+				break keygen
 			}
 		}
 		return nil
 	}()
 
 	wg.Wait()
-
-	fmt.Println("POST FOR")
 	return newKeys, nil
 }
 
@@ -155,15 +153,18 @@ func makeTestFixtureFilePath(partyIndex int) string {
 }
 
 func toAddress(pubKey ecdsa.PublicKey) string {
-	// uncompressed := elliptic.Marshal(pubKey.Curve, pubKey.X, pubKey.Y)
 	uncompressed := crypto.CompressPubkey(&pubKey)
 	hash := crypto.Keccak256(uncompressed[1:]) // Remove the 0x04 prefix
 	addr := hash[12:]
-	return "0x" + hex.EncodeToString(addr)
+	address := "0x" + hex.EncodeToString(addr)
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+	if re.MatchString(address) {
+		return address
+	}
+	return ""
 }
 
 func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.SignatureData, error) {
-	fmt.Println("TSSSign-1")
 	partyIDs := make(tss.UnSortedPartyIDs, Threshold+1)
 	plucked := make(map[int]interface{}, Threshold+1)
 	for i := 0; len(plucked) < Threshold+1; i = (i + 1) % Participants {
@@ -179,7 +180,7 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 		partyIDs[j] = tss.NewPartyID(pMoniker, pMoniker, key.ShareID)
 		j++
 	}
-	fmt.Println("TSSSign-2")
+
 	signPIDs := tss.SortPartyIDs(partyIDs)
 	sort.Slice(keysData, func(i, j int) bool { return keysData[i].ShareID.Cmp(keysData[j].ShareID) == -1 })
 	p2pCtx := tss.NewPeerContext(signPIDs)
@@ -201,7 +202,7 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 			}
 		}(P)
 	}
-	fmt.Println("TSSSign-3")
+
 	var ended int32
 	var signature *common.SignatureData
 	var wg sync.WaitGroup
@@ -211,7 +212,6 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 		defer wg.Done()
 	signing:
 		for {
-			fmt.Println("FOR")
 			select {
 			case msg := <-outCh:
 				dest := msg.GetTo()
@@ -232,7 +232,7 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 				atomic.AddInt32(&ended, 1)
 				if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 					signature = sig
-					fmt.Println("ECDSA signing test done.")
+					common.Logger.Info("ECDSA signing test done.")
 					break signing
 				}
 			case err := <-errCh:
@@ -244,7 +244,7 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 	}()
 
 	wg.Wait()
-	fmt.Printf("POST FOR %s", signature)
+	common.Logger.Infof("POST FOR %s", signature)
 	return signature, nil
 }
 
@@ -260,4 +260,8 @@ func bytesToBigInt(data []byte) *big.Int {
 	x := new(big.Int)
 	x.SetBytes(data)
 	return x
+}
+
+func verifySignature(pk ecdsa.PublicKey, data []byte, r *big.Int, s *big.Int) bool {
+	return ecdsa.Verify(&pk, data, r, s)
 }
