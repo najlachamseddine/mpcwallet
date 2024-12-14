@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
 	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -63,12 +62,12 @@ func (m *WalletMPCService) getRouter() http.Handler {
 }
 
 func (m *WalletMPCService) handleRoot(w http.ResponseWriter, req *http.Request) {
-	common.Logger.Info("handle root")
+	m.log.Logger.Info("handle root")
 	m.respondOK(w, nilResponse)
 }
 
 func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.Request) {
-	common.Logger.Info("handle create wallet")
+	m.log.Logger.Info("handle create wallet")
 	keysData, err := generateTSSKey()
 	if err != nil {
 		m.log.WithField("response", len(keysData)).WithError(err).Error("Couldn't create an tss mpc wallet")
@@ -85,8 +84,8 @@ func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.R
 		}
 		go func() {
 			walletsLock.Lock()
-			defer walletsLock.Unlock()
 			wallets[addr] = newWallet
+			walletsLock.Unlock()
 		}()
 		m.respondOK(w, json.NewEncoder(w).Encode(newWallet))
 	} else {
@@ -96,6 +95,7 @@ func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.R
 }
 
 func (m *WalletMPCService) handleGetWallets(w http.ResponseWriter, req *http.Request) {
+	m.log.Logger.Info("handle get wallets")
 	walletsLock.Lock()
 	defer walletsLock.Unlock()
 
@@ -108,11 +108,12 @@ func (m *WalletMPCService) handleGetWallets(w http.ResponseWriter, req *http.Req
 }
 
 func (m *WalletMPCService) handleGetSignature(w http.ResponseWriter, req *http.Request) {
+	m.log.Logger.Info("handle get signature")
 	q := req.URL.Query()
 	dataHex := q.Get("data")
 	walletAddr := q.Get("wallet")
-	fmt.Println(dataHex)
-	fmt.Println(walletAddr)
+	m.log.Logger.Infof("data %s", dataHex)
+	m.log.Logger.Infof("wallet %s", walletAddr)
 	if dataHex == "" {
 		http.Error(w, "missing data param", http.StatusBadRequest)
 		return
@@ -126,9 +127,8 @@ func (m *WalletMPCService) handleGetSignature(w http.ResponseWriter, req *http.R
 		http.Error(w, "invalid data hex", http.StatusBadRequest)
 		return
 	}
-	walletsLock.Lock()
+
 	wallet, ok := wallets[walletAddr]
-	walletsLock.Unlock()
 
 	if !ok {
 		http.Error(w, "wallet not found", http.StatusNotFound)

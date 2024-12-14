@@ -28,7 +28,7 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 	// preParams, _ := keygen.GeneratePreParams(1 * time.Minute)
 	parties := make([]*keygen.LocalParty, 0, Participants)
 	fixtures, partyIDs, err := keygen.LoadKeygenTestFixtures(Participants)
-	fmt.Println(len(fixtures))
+	common.Logger.Info(len(fixtures))
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		partyIDs = tss.GenerateTestPartyIDs(Participants)
@@ -53,7 +53,7 @@ func generateTSSKey() ([]*keygen.LocalPartySaveData, error) {
 		parties = append(parties, P)
 		go func(p *keygen.LocalParty) {
 			if err := p.Start(); err != nil {
-				fmt.Println("Error while starting P")
+				common.Logger.Info("Error while starting P")
 				errCh <- err
 			}
 		}(P)
@@ -154,7 +154,7 @@ func makeTestFixtureFilePath(partyIndex int) string {
 
 func toAddress(pubKey ecdsa.PublicKey) string {
 	uncompressed := crypto.CompressPubkey(&pubKey)
-	hash := crypto.Keccak256(uncompressed[1:]) // Remove the 0x04 prefix
+	hash := crypto.Keccak256(uncompressed[1:])
 	addr := hash[12:]
 	address := "0x" + hex.EncodeToString(addr)
 	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
@@ -244,7 +244,7 @@ func tssSign(keysData []*keygen.LocalPartySaveData, msg []byte) (*common.Signatu
 	}()
 
 	wg.Wait()
-	common.Logger.Infof("POST FOR %s", signature)
+	common.Logger.Infof("Signature %s", signature)
 	return signature, nil
 }
 
