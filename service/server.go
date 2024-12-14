@@ -68,6 +68,7 @@ func (m *WalletMPCService) handleRoot(w http.ResponseWriter, req *http.Request) 
 
 func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.Request) {
 	m.log.Logger.Info("handle create wallet")
+	m.log.Logger.Info("wallet creation in progress...")
 	keysData, err := generateTSSKey()
 	if err != nil {
 		m.log.WithField("response", len(keysData)).WithError(err).Error("Couldn't create an tss mpc wallet")
