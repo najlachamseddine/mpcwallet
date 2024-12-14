@@ -19,7 +19,7 @@ go build
 ```
 curl http://localhost:8080/wallet
 ```
-Return a wallet object. It might take some time (1 minute) to get the response back. The newly created wallets are stored in a map. This map in memory is cleaned if the server is restarted. To have persistent wallets data, these wallets must be stored in a database.
+Return a wallet object (address, public key, and keys datas of the Participants in the keygen). It might take some time (1 minute) to get the response back. The newly created wallets are stored in a map. This map in memory is cleaned if the server is restarted. To have persistent wallets data, these wallets must be stored in a database.
 
 ### Get the wallets
 
