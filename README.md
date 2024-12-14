@@ -19,6 +19,7 @@ go build
 ```
 curl http://localhost:8080/wallet
 ```
+Return a wallet object. It might take some time to get the response. The newly created wallets are stored in a map. This map in memory is cleaned if the server is restarted. To have persistent wallets data, these wallets must be stored in a database.
 
 ### Get the wallets
 
