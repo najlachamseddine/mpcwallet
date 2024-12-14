@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,8 +35,8 @@ type ServerOpts struct {
 }
 
 type Wallet struct {
-	Address string
-	KeyData *keygen.LocalPartySaveData
+	Address  string
+	KeysData []*keygen.LocalPartySaveData
 }
 
 func NewWalletMPCService(opts ServerOpts) (*WalletMPCService, error) {
@@ -51,7 +52,7 @@ func (m *WalletMPCService) getRouter() http.Handler {
 
 	r.HandleFunc(pathCreateWallet, m.handleCreateWallet) //.Methods(http.MethodPost)
 	r.HandleFunc(pathGetWallets, m.handleGetWallets).Methods(http.MethodGet)
-	// r.HandleFunc(pathGetSignature, w.handleGetSignature).Methods(http.MethodGet)
+	r.HandleFunc(pathGetSignature, m.handleGetSignature).Methods(http.MethodGet)
 
 	r.Use(mux.CORSMethodMiddleware(r))
 	loggedRouter := LoggingMiddlewareLogrus(m.log, r)
@@ -65,16 +66,16 @@ func (m *WalletMPCService) handleRoot(w http.ResponseWriter, req *http.Request) 
 
 func (m *WalletMPCService) handleCreateWallet(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("handle create wallet")
-	keyData, err := generateTSSKey()
+	keysData, err := generateTSSKey()
 	if err != nil {
-		m.log.WithField("response", keyData).WithError(err).Error("Couldn't create an tss mpc wallet")
+		m.log.WithField("response", len(keysData)).WithError(err).Error("Couldn't create an tss mpc wallet")
 		http.Error(w, "", http.StatusInternalServerError)
 	}
 
-	addr := toAddress(*keyData.ECDSAPub.ToECDSAPubKey())
+	addr := toAddress(*keysData[0].ECDSAPub.ToECDSAPubKey())
 	newWallet := &Wallet{
-		Address: addr,
-		KeyData: &keyData,
+		Address:  addr,
+		KeysData: keysData,
 	}
 	go func() {
 		walletsLock.Lock()
@@ -94,6 +95,46 @@ func (m *WalletMPCService) handleGetWallets(w http.ResponseWriter, req *http.Req
 		addresses = append(addresses, addr)
 	}
 	m.respondOK(w, json.NewEncoder(w).Encode(addresses))
+}
+
+func (m *WalletMPCService) handleGetSignature(w http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	dataHex := q.Get("data")
+	walletAddr := q.Get("wallet")
+	fmt.Println(dataHex)
+	fmt.Println(walletAddr)
+	if err := req.ParseForm(); err != nil {
+	}
+	if dataHex == "" {
+		http.Error(w, "missing data param", http.StatusBadRequest)
+		return
+	}
+	if walletAddr == "" {
+		http.Error(w, "missing wallet param", http.StatusBadRequest)
+		return
+	}
+	dataBytes, err := hex.DecodeString(dataHex)
+	if err != nil {
+		http.Error(w, "invalid data hex", http.StatusBadRequest)
+		return
+	}
+	walletsLock.Lock()
+	wallet, ok := wallets[walletAddr]
+	walletsLock.Unlock()
+
+	if !ok {
+		http.Error(w, "wallet not found", http.StatusNotFound)
+		return
+	}
+
+	sig, err := tssSign(wallet.KeysData, dataBytes)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Signing failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]string{"R": hex.EncodeToString(sig.R), "S": hex.EncodeToString(sig.S)}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (m *WalletMPCService) respondOK(w http.ResponseWriter, response any) {
